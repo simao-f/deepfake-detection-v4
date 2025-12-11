@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.vscode/
+data/
+eda_results/
+logs/
+*.pth
+__pycache__/
