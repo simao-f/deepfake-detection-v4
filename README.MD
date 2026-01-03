@@ -3,6 +3,7 @@
 This repository contains the full code and data used for the Master's thesis titled *"Detecting Synthetic Media: Generative AI and its impact for Cybersecurity"* as part of the master's in Business Data Science at Aalborg University.
 
 *Author*: Simão Ferreira
+
 *Supervisor*: Hamid Bekamiri
 
 
