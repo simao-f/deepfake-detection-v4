@@ -3,8 +3,8 @@
 #SBATCH --job-name=model_eval_full
 #SBATCH --output=logs/model_eval_full_%j.out
 #SBATCH --error=logs/model_eval_full_%j.err
-#SBATCH --mem=32G
-#SBATCH --cpus-per-task=8
+#SBATCH --mem=24G
+#SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --time=04:00:00
 

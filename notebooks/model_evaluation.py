@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,8 +35,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-BATCH_SIZE = 64
-NUM_WORKERS = 4
+BATCH_SIZE = 256
+NUM_WORKERS = 8
 IMG_SIZE = 224
 NORMALIZE_MEAN = [0.485, 0.456, 0.406]
 NORMALIZE_STD = [0.229, 0.224, 0.225]
@@ -68,24 +68,40 @@ def build_model(architecture: str, num_classes: int = 1) -> nn.Module:
     
     if architecture == "efficientnet":
         model = models.efficientnet_b0(weights=None)
-        in_features = model.classifier[1].in_features
-        model.classifier[1] = nn.Linear(in_features, num_classes)
+        classifier = model.classifier
+        if isinstance(classifier[1], nn.Linear):
+            in_features = classifier[1].in_features
+        else:
+            in_features = 1280
+            
+        model.classifier[1] = nn.Sequential(
+            nn.Dropout(p=0.5),
+            nn.Linear(in_features, 1) # Always 1 for EfficientNet in this project
+        )
         
     elif architecture == "resnet":
         model = models.resnet50(weights=None)
         in_features = model.fc.in_features
-        model.fc = nn.Sequential(
+        model.fc = nn.Sequential( # type: ignore
             nn.Linear(in_features, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Dropout(0.4),
-            nn.Linear(512, num_classes)
+            nn.Dropout(0.5),
+            nn.Linear(512, 1) # Always 1 for ResNet in this project
         )
         
     elif architecture == "vit":
         model = models.vit_b_16(weights=None)
-        in_features = model.heads.head.in_features
-        model.heads.head = nn.Linear(in_features, num_classes)
+        heads = model.heads 
+        if isinstance(heads.head, nn.Linear):
+            in_features = heads.head.in_features
+        else:
+            in_features = 768
+            
+        model.heads.head = nn.Sequential(
+            nn.Dropout(p=0.5),
+            nn.Linear(in_features, 2) # Always 2 for ViT in this project
+        )
         
     else:
         raise ValueError(f"Unsupported architecture: {architecture}")
@@ -148,7 +164,7 @@ def run_inference(model: nn.Module, dataloader: DataLoader, device: torch.device
             labels = labels.to(device)
 
             if use_amp:
-                with torch.amp.autocast('cuda'):
+                with torch.amp.autocast('cuda'): # type: ignore
                     outputs = model(inputs)
             else:
                 outputs = model(inputs)
@@ -184,14 +200,18 @@ def evaluate_dataset(model: nn.Module, data_dir: str, device: torch.device) -> D
     
     y_true, y_scores, y_preds = run_inference(model, dataloader, device)
 
-    acc = accuracy_score(y_true, y_preds)
-    prec = precision_score(y_true, y_preds, zero_division=0)
-    rec = recall_score(y_true, y_preds, zero_division=0)
-    f1 = f1_score(y_true, y_preds, zero_division=0)
+    # Calculate metrics and cast to native float to avoid numpy types in Dict return
+    acc = float(accuracy_score(y_true, y_preds))
+    prec = float(precision_score(y_true, y_preds, zero_division=0)) 
+    rec = float(recall_score(y_true, y_preds, zero_division=0)) 
+    f1 = float(f1_score(y_true, y_preds, zero_division=0)) 
+    
+    auc = 0.0
     try:
-        auc = roc_auc_score(y_true, y_scores)
+        auc = float(roc_auc_score(y_true, y_scores))
     except ValueError:
-        auc = 0.0 # Handle case with only one class
+        auc = 0.0 
+        
     eer, eer_thresh = calculate_eer(y_true, y_scores)
 
     return {
@@ -206,7 +226,11 @@ def evaluate_dataset(model: nn.Module, data_dir: str, device: torch.device) -> D
 
 def print_markdown_table(df: pd.DataFrame, title: str):
     print(f"\n### {title}")
-    print(df.to_markdown(index=False, floatfmt=".4f"))
+    # Ensure tabulate is installed or fall back to string
+    try:
+        print(df.to_markdown(index=False, floatfmt=".4f"))
+    except ImportError:
+        print(df.to_string(index=False))
     print("\n")
 
 def main():
@@ -218,8 +242,7 @@ def main():
     logger.info(f"Using device: {device}")
     
     # Initialize storage for results
-    # Structure: { "Train": [records], "Validation": [records], "Test": [records] }
-    all_results = {phase: [] for phase in DATASETS.keys()}
+    all_results: Dict[str, List[Dict[str, Union[str, float]]]] = {phase: [] for phase in DATASETS.keys()}
 
     # Loop through Models
     for model_name, weights_path in DEFAULT_PATHS.items():
@@ -250,7 +273,9 @@ def main():
             df = pd.DataFrame(all_results[phase])
             # Reorder columns
             cols = ["Model", "Accuracy", "Precision", "Recall", "F1-Score", "AUC-ROC", "EER", "EER Threshold"]
-            df = df[cols]
+            # Filter columns to ensure they exist
+            existing_cols = [c for c in cols if c in df.columns]
+            df = df[existing_cols]
             
             print_markdown_table(df, f"{phase} Set Performance")
             

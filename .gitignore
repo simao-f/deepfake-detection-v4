@@ -1,11 +1,36 @@
-.venv/
+# General
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+*$py.class
 .DS_Store
+Thumbs.db
+
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# IDEs
 .vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data & Models
 data/
-eda_results/
-logs/
 *.pth
-__pycache__/
+*.pt
+*.ckpt
+*.h5
+
+# Logs & Outputs
+logs/
+eda_results/
+*.log
+*.out
+*.err
+
+# Slurm
+slurm-*.out
